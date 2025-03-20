@@ -20,6 +20,35 @@ type Post struct {
 	Tags      []string  `json:"tags,omitempty" bson:"tags,omitempty"`
 }
 
+type UpdatedPost struct {
+	TempData map[string]interface{}
+}
+
+// func (r *Post) Sanitize(model Post) UpdatedPost {
+//     rValue := reflect.ValueOf(&model).Elem()
+//     rType := rValue.Type()
+// 	var newPost UpdatedPost
+
+//     for i := 0; i < rType.NumField(); i++ {
+// 		field := rType.Field(i)
+
+// 		if field != "" {
+
+// 		}
+// 		jsonTag := field.Tag.Get("json")
+// 		typeTag := field.Tag.Get("type")
+// 		if jsonTag == item.Key && typeTag != "int" {
+// 			rValue.FieldByName(field.Name).SetString(item.Value)
+// 		}
+// 		if jsonTag == item.Key && typeTag == "int" {
+// 			if intValue, err := strconv.Atoi(item.Value); err == nil {
+// 				rValue.FieldByName(field.Name).SetInt(int64(intValue))
+// 			}
+// 		}
+// 	}
+//     return newPost
+// }
+
 var client *mongo.Client
 
 func New(mongo *mongo.Client) Post {
@@ -32,10 +61,10 @@ func returnCollectionPointer(collection string) *mongo.Collection {
 	return client.Database("blog").Collection(collection)
 }
 
-func (p *Post) InsertPost(entry Post) error {
+func (p *Post) InsertPost(entry Post) (*mongo.InsertOneResult, error) {
 	collection := returnCollectionPointer("post")
 
-	_, err := collection.InsertOne(context.TODO(), Post{
+	result, err := collection.InsertOne(context.TODO(), Post{
 		Title:     entry.Title,
 		Content:   entry.Content,
 		Category:  entry.Category,
@@ -46,10 +75,10 @@ func (p *Post) InsertPost(entry Post) error {
 
 	if err != nil {
 		log.Println("Error: ", err)
-		return err
+		return nil, err
 	}
 
-	return nil
+	return result, nil
 }
 
 func (p *Post) GetAllPost() ([]Post, error) {
@@ -78,15 +107,11 @@ func (p *Post) GetPostById(id string) (Post, error) {
 	collection := returnCollectionPointer("post")
 	var post Post
 
-	mongoId, err := primitive.ObjectIDFromHex(id)
-	log.Println(mongoId)
-	if err != nil {
-		return Post{}, err
-	}
+	mongoId, _ := primitive.ObjectIDFromHex(id)
 
-	err = collection.FindOne(context.Background(), bson.M{"_id": mongoId}).Decode(&post)
+	err := collection.FindOne(context.Background(), bson.M{"_id": mongoId}).Decode(&post)
 	if err != nil {
-		log.Println(err)
+		log.Fatal(err)
 		return Post{}, err
 	}
 
@@ -95,25 +120,22 @@ func (p *Post) GetPostById(id string) (Post, error) {
 
 func (p *Post) UpdatePost(entry Post) (*mongo.UpdateResult, error) {
 	collection := returnCollectionPointer("post")
-	mongoId, err := primitive.ObjectIDFromHex(entry.ID)
-	if err != nil {
-		return nil, err
-	}
+	mongoId, _ := primitive.ObjectIDFromHex(entry.ID)
 
 	filter := bson.D{{Key: "_id", Value: mongoId}}
+	bsonEntry, _ := bson.Marshal(bson.M{
+		"title":      entry.Title,
+		"content":    entry.Content,
+		"category":   entry.Category,
+		"updated_at": time.Now(),
+		"tags":       entry.Tags,
+	})
+	var test Post
+	err := bson.Unmarshal(bsonEntry, &test)
 
-	update := bson.D{{
-		Key: "$set", Value: bson.M{
-			"title":      entry.Title,
-			"content":    entry.Content,
-			"category":   entry.Category,
-			"updated_at": time.Now(),
-			"tags":       entry.Tags,
-		},
-	}}
-
+	update := bson.M{"$set": test}
 	res, err := collection.UpdateOne(
-		context.Background(),
+		context.TODO(),
 		filter,
 		update,
 	)
