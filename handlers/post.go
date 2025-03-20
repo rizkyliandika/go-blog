@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/rizkyliandika/go-blog/services"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 func healthCheck(w http.ResponseWriter, r *http.Request) {
@@ -78,11 +79,12 @@ func getPostById(w http.ResponseWriter, r *http.Request) {
 
 func createPost(w http.ResponseWriter, r *http.Request) {
 	var post services.Post
+	var insertResult *mongo.InsertOneResult
 	err := json.NewDecoder(r.Body).Decode(&post)
 	if err != nil {
 		log.Fatal(err)
 	}
-	err = post.InsertPost(post)
+	insertResult, err = post.InsertPost(post)
 
 	if err != nil {
 		errResponse := Response{
@@ -90,12 +92,14 @@ func createPost(w http.ResponseWriter, r *http.Request) {
 			Code: http.StatusInternalServerError,
 		}
 		json.NewEncoder(w).Encode(errResponse)
+		w.WriteHeader(errResponse.Code)
 		return
 	}
 
 	res := Response{
 		Msg:  "Successfully Created Post",
 		Code: http.StatusCreated,
+		Data: insertResult,
 	}
 
 	jsonStr, err := json.Marshal(res)
@@ -110,6 +114,7 @@ func createPost(w http.ResponseWriter, r *http.Request) {
 
 func updatePost(w http.ResponseWriter, r *http.Request) {
 	var post services.Post
+	var updateResult *mongo.UpdateResult
 
 	err := json.NewDecoder(r.Body).Decode(&post)
 	if err != nil {
@@ -117,7 +122,7 @@ func updatePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = post.UpdatePost(post)
+	updateResult, err = post.UpdatePost(post)
 	if err != nil {
 		errorRes := Response{
 			Msg:  "Error update post",
@@ -131,6 +136,7 @@ func updatePost(w http.ResponseWriter, r *http.Request) {
 	res := Response{
 		Msg:  "Successfully updated",
 		Code: http.StatusOK,
+		Data: updateResult,
 	}
 
 	jsonStr, err := json.Marshal(res)
